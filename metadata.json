@@ -1,0 +1,6 @@
+{
+  "name": "Me'mar (معمار)",
+  "description": "منصة تحليلات استراتيجية وتكنولوجية معمقة في تقاطع الذكاء الاصطناعي والجيوبوليتكس والتقنية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
