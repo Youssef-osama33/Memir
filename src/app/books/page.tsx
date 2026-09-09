@@ -3,16 +3,19 @@ import { type Metadata } from "next";
 import Link from "next/link";
 import Navigation from "../../components/navigation";
 import Footer from "../../components/footer";
-import { getAllArticles } from "../../lib/mdx";
+import { getPublishedArticles } from "../../lib/articles";
 import { Calendar, Lock, ArrowLeft, BookOpen, Compass } from "lucide-react";
+import { AuthorByline } from "../../components/AuthorByline";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "الكتب وقسم 'الفكرة في زمننا' | معمار",
   description: "مراجعات نقدية تحليلية لأهم الكتب التأسيسية التي تُعيد تفكيك التكنولوجيا والجيوبوليتكس ونماذج المعرفة، مقترنة بقسم دائم: 'الفكرة في زمننا'.",
 };
 
-export default function BooksPage() {
-  const allArticles = getAllArticles();
+export default async function BooksPage() {
+  const allArticles = await getPublishedArticles();
   const bookReviews = allArticles.filter((a) => a.metadata.category === "books");
 
   return (
@@ -73,15 +76,15 @@ export default function BooksPage() {
                 </div>
               </div>
 
-              <h2 className="text-2xl md:text-3xl font-serif font-bold text-neutral-900 leading-snug mb-3 group-hover:text-amber-800 transition-colors">
+              <h2 className="text-2xl md:text-3xl font-serif font-bold text-neutral-900 leading-snug mb-3 group-hover:text-[#C86A00] transition-colors">
                 <Link href={`/articles/${article.metadata.slug}`}>
                   {article.metadata.title}
                 </Link>
               </h2>
 
               {article.metadata.bookAuthor && (
-                <div className="text-xs font-sans text-neutral-600 mb-4 bg-neutral-50 p-3 border-r-2 border-amber-800 flex items-center justify-between">
-                  <span>المؤلف: <strong className="text-black">{article.metadata.bookAuthor}</strong></span>
+                <div className="text-xs font-sans text-neutral-600 mb-4 bg-neutral-50 p-3 border-r-2 border-[#C86A00] flex items-center justify-between">
+                  <span>المؤلف الأصلي: <strong className="text-black">{article.metadata.bookAuthor}</strong></span>
                   {article.metadata.bookOriginalTitle && (
                     <span className="text-neutral-400 font-mono text-[11px]" dir="ltr">
                       {article.metadata.bookOriginalTitle}
@@ -96,9 +99,9 @@ export default function BooksPage() {
 
               {/* Distinction: The Idea in Our Time box */}
               {article.metadata.ideaInOurTimeTitle && (
-                <div className="bg-[#FFFDF7] border-2 border-amber-800/30 p-5 mb-6 rounded-sm">
-                  <div className="flex items-center gap-2 text-xs font-sans font-bold text-amber-900 mb-2">
-                    <Compass className="w-4 h-4 text-amber-800 animate-spin-slow" />
+                <div className="bg-[#FFFDF7] border-2 border-[#C86A00]/30 p-5 mb-6 rounded-sm">
+                  <div className="flex items-center gap-2 text-xs font-sans font-bold text-[#8C4B00] mb-2">
+                    <Compass className="w-4 h-4 text-[#C86A00]" />
                     <span>{article.metadata.ideaInOurTimeTitle}</span>
                   </div>
                   <p className="text-xs text-neutral-700 font-serif leading-relaxed">
@@ -107,7 +110,11 @@ export default function BooksPage() {
                 </div>
               )}
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-4 border-t border-neutral-100">
+                <AuthorByline
+                  authorName={article.metadata.author}
+                  size="sm"
+                />
                 <Link
                   href={`/articles/${article.metadata.slug}`}
                   className="inline-flex items-center gap-1.5 text-xs font-sans font-bold text-white bg-black hover:bg-neutral-800 px-5 py-2.5 transition-colors"

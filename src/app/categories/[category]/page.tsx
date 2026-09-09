@@ -5,8 +5,12 @@ import Link from "next/link";
 import Navigation from "../../../components/navigation";
 import Footer from "../../../components/footer";
 import { getCategoryBySlug, CATEGORIES } from "../../../lib/categories";
-import { getAllArticles } from "../../../lib/mdx";
+import { getPublishedArticles } from "../../../lib/articles";
 import { Calendar, Lock, ArrowLeft, BookOpen, Layers } from "lucide-react";
+import { AuthorByline } from "../../../components/AuthorByline";
+import CategoryIcon from "../../../components/CategoryIcon";
+
+export const dynamic = "force-dynamic";
 
 interface CategoryPageProps {
   params: Promise<{ category: string }>;
@@ -38,7 +42,7 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
     return notFound();
   }
 
-  const allArticles = getAllArticles();
+  const allArticles = await getPublishedArticles();
   const categoryArticles = allArticles.filter((a) => a.metadata.category === cat.slug);
 
   return (
@@ -47,9 +51,10 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
       <div className="py-16 md:py-24 flex-grow">
         <div className="max-w-4xl mx-auto px-6 text-right">
         {/* Category Header */}
-        <div className="border-b border-neutral-300 pb-10 mb-12">
+        <div className={`border-b-2 pb-10 mb-12 ${cat.theme.border}`}>
           <div className="flex items-center gap-2 mb-3">
-            <span className="font-sans text-[11px] font-bold text-amber-800 uppercase tracking-widest bg-amber-500/10 px-2.5 py-1 rounded-sm">
+            <span className={`font-sans text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-sm border ${cat.theme.text} ${cat.theme.bg} ${cat.theme.border} flex items-center`}>
+              <CategoryIcon name={cat.theme.iconName} className="w-3.5 h-3.5 ml-1.5" />
               {cat.isHorizontal ? "تصنيف أفقي مستقل" : "قسم تحليلي رئيسي"}
             </span>
             <span className="font-sans text-xs text-neutral-400 font-mono" dir="ltr">
@@ -98,8 +103,8 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
                     </span>
                     <span className="text-neutral-300">•</span>
                     {article.metadata.isPremium ? (
-                      <span className="inline-flex items-center gap-1 text-amber-800 bg-amber-50 px-2 py-0.5 border border-amber-200/60 text-[10px] font-bold rounded-sm">
-                        <Lock className="w-3 h-3 ml-0.5" />
+                      <span className="inline-flex items-center gap-1 text-[#C86A00] bg-amber-50 px-2 py-0.5 border border-amber-200/60 text-[10px] font-bold rounded-sm">
+                        <Lock className="w-3 h-3 ml-0.5 text-[#C86A00]" />
                         للمشتركين فقط
                       </span>
                     ) : (
@@ -109,7 +114,7 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
                     )}
                   </div>
 
-                  <h2 className="text-2xl md:text-3xl font-serif font-bold text-neutral-900 leading-snug mb-3 group-hover:text-amber-800 transition-colors">
+                  <h2 className={`text-2xl md:text-3xl font-serif font-bold text-neutral-900 leading-snug mb-3 transition-colors ${cat.theme.groupHoverText}`}>
                     <Link href={`/articles/${article.metadata.slug}`}>
                       {article.metadata.title}
                     </Link>
@@ -117,7 +122,7 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
 
                   {isBook && article.metadata.bookAuthor && (
                     <div className="mb-3 font-sans text-xs text-neutral-600 bg-neutral-100/70 p-2.5 border-r-2 border-neutral-800">
-                      <span>المؤلف: <strong>{article.metadata.bookAuthor}</strong></span>
+                      <span>المؤلف الأصلي: <strong>{article.metadata.bookAuthor}</strong></span>
                       {article.metadata.bookOriginalTitle && (
                         <span className="mr-3 text-neutral-400 font-mono" dir="ltr">({article.metadata.bookOriginalTitle})</span>
                       )}
@@ -130,8 +135,8 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
 
                   {isBook && article.metadata.ideaInOurTimeTitle && (
                     <div className="bg-[#FFFBF2] border border-amber-200/80 p-4 mb-5 rounded-sm">
-                      <div className="flex items-center gap-1.5 text-xs font-sans font-bold text-amber-900 mb-1">
-                        <BookOpen className="w-3.5 h-3.5 ml-1 text-amber-700" />
+                      <div className="flex items-center gap-1.5 text-xs font-sans font-bold text-[#8C4B00] mb-1">
+                        <BookOpen className="w-3.5 h-3.5 ml-1 text-[#C86A00]" />
                         <span>{article.metadata.ideaInOurTimeTitle}</span>
                       </div>
                       <p className="text-xs text-neutral-700 font-serif leading-relaxed">
@@ -140,13 +145,19 @@ export default async function CategoryListingPage({ params }: CategoryPageProps)
                     </div>
                   )}
 
-                  <Link
-                    href={`/articles/${article.metadata.slug}`}
-                    className="inline-flex items-center gap-1.5 text-sm font-sans font-bold text-neutral-900 hover:text-amber-800 transition-colors group-hover:underline underline-offset-4"
-                  >
-                    <span>قراءة التحليل كاملاً</span>
-                    <ArrowLeft className="w-4 h-4 mr-1 group-hover:-translate-x-1 transition-transform" />
-                  </Link>
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                    <AuthorByline
+                      authorName={article.metadata.author}
+                      size="sm"
+                    />
+                    <Link
+                      href={`/articles/${article.metadata.slug}`}
+                      className={`inline-flex items-center gap-1.5 text-sm font-sans font-bold text-neutral-900 transition-colors ${cat.theme.hoverText}`}
+                    >
+                      <span>قراءة التحليل كاملاً</span>
+                      <ArrowLeft className="w-4 h-4 mr-1 group-hover:-translate-x-1 transition-transform" />
+                    </Link>
+                  </div>
                 </article>
               );
             })}

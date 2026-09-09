@@ -1,12 +1,14 @@
 import fs from "fs";
 import path from "path";
 import matter from "gray-matter";
+import { slugifyAuthor } from "./authors";
 
 export interface ArticleMetadata {
   title: string;
   slug: string;
   excerpt: string;
   author: string; // The author's name, e.g. "د. طارق الحكيم" or specified in MDX frontmatter
+  authorSlug?: string; // URL-friendly slug, e.g. "tariq-al-hakim"
   category: string; // e.g. "ai-geopolitics", "cybersecurity", "quantum-computing", "energy", "digital-infrastructure", "applied-modeling", "fiqh-al-waqi", "books"
   isPremium: boolean;
   publishedAt: string; // ISO 8601 String
@@ -94,11 +96,16 @@ export function getArticleBySlug(slug: string): ParsedArticle | null {
     const fileContents = fs.readFileSync(fullPath, "utf8");
     const { data, content } = matter(fileContents);
 
+    const rawAuthor = data.author?.trim() || "";
+    const authorName = rawAuthor || "هيئة تحرير مِعمار";
+    const authorSlug = data.authorSlug?.trim() || slugifyAuthor(authorName);
+
     const metadata: ArticleMetadata = {
       title: data.title || "Untitled Strategic Analysis",
       slug: sanitizedSlug,
       excerpt: data.excerpt || "",
-      author: data.author?.trim() || "",
+      author: authorName,
+      authorSlug,
       category: normalizeCategorySlug(data.category),
       isPremium: data.isPremium !== undefined ? Boolean(data.isPremium) : true,
       publishedAt: data.publishedAt ? new Date(data.publishedAt).toISOString() : new Date().toISOString(),
@@ -159,9 +166,52 @@ export function getPublishedArticles(): ParsedArticle[] {
 }
 
 /**
- * Filters articles by category slug
+ * Filters articles by category slug, excluding drafts by default.
  */
-export function getArticlesByCategory(categorySlug: string): ParsedArticle[] {
-  const all = getAllArticles();
+export function getArticlesByCategory(categorySlug: string, includeDrafts: boolean = false): ParsedArticle[] {
+  const all = getAllArticles(includeDrafts);
   return all.filter((a) => a.metadata.category === categorySlug);
+}
+
+/**
+ * Filters articles written by a specific author (by name or slug), excluding drafts by default.
+ */
+export function getArticlesByAuthor(authorIdentifier: string, includeDrafts: boolean = false): ParsedArticle[] {
+  const all = getAllArticles(includeDrafts);
+  const target = authorIdentifier.trim();
+  return all.filter((a) => {
+    const aName = a.metadata.author?.trim();
+    const aSlug = a.metadata.authorSlug?.trim();
+    return (
+      aName === target ||
+      aSlug === target ||
+      (aName && slugifyAuthor(aName) === target)
+    );
+  });
+}
+
+/**
+ * Toggles an article's draft status in its MDX frontmatter directly.
+ */
+export function toggleArticleDraft(slug: string): { success: boolean; draft?: boolean; error?: string } {
+  try {
+    const sanitizedSlug = slug.replace(/[^a-zA-Z0-9-_]/g, "");
+    const fullPath = path.join(ARTICLES_DIRECTORY, `${sanitizedSlug}.mdx`);
+    if (!fs.existsSync(fullPath)) {
+      return { success: false, error: "المقال غير موجود في نظام الملفات" };
+    }
+
+    const fileContents = fs.readFileSync(fullPath, "utf8");
+    const parsed = matter(fileContents);
+    const newDraftStatus = !Boolean(parsed.data.draft);
+    parsed.data.draft = newDraftStatus;
+
+    const newFileContents = matter.stringify(parsed.content, parsed.data);
+    fs.writeFileSync(fullPath, newFileContents, "utf8");
+
+    return { success: true, draft: newDraftStatus };
+  } catch (error: any) {
+    console.error(`[TOGGLE_DRAFT_FAIL] Slug: ${slug}. Error:`, error);
+    return { success: false, error: error?.message || "فشل تعديل حالة المسودة" };
+  }
 }

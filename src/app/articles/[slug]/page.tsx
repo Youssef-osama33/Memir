@@ -1,13 +1,28 @@
+import ReadingProgress from "../../../components/article/ReadingProgress";
+import TableOfContents from "../../../components/article/TableOfContents";
 import { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getArticleBySlug, sliceContent, getAllArticles } from "../../../lib/mdx";
+import { getArticleBySlug, sliceContent, getAllArticles, getPublishedArticles } from "../../../lib/articles";
 import { getCategoryBySlug } from "../../../lib/categories";
 import { auth } from "../../../lib/auth";
 import { getPppConfig } from "../../../lib/ppp";
 import Paywall from "../../../components/paywall";
 import { Calendar, Clock, Lock, Play, BookOpen, Compass, ArrowRight, ArrowLeft, Layers } from "lucide-react";
+import { db as prisma } from "../../../lib/db";
+import AudioPlayer from "../../../components/article/AudioPlayer";
+import LikeButton from "../../../components/article/LikeButton";
+import BookmarkButton from "../../../components/article/BookmarkButton";
+import CommentsSection from "../../../components/article/CommentsSection";
+import NewsletterForm from "../../../components/article/NewsletterForm";
+import TextHighlighter from "../../../components/article/TextHighlighter";
+import ArticleChat from "../../../components/article/ArticleChat";
+import { AuthorByline } from "../../../components/AuthorByline";
+import { getAuthorByName, getAuthorInitials } from "../../../lib/authors";
+import Image from "next/image";
+
+export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -15,8 +30,11 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const article = getArticleBySlug(slug);
-  if (!article) {
+  const session = await auth();
+  const isAdmin = session?.user?.role === "ADMIN";
+
+  const article = await getArticleBySlug(slug);
+  if (!article || (article.metadata.draft && !isAdmin)) {
     return {
       title: "المقال غير موجود | معمار",
     };
@@ -29,41 +47,59 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description: article.metadata.excerpt,
       type: "article",
       publishedTime: article.metadata.publishedAt,
+      url: `/articles/${article.metadata.slug}`,
+      images: [
+        {
+          url: `/api/og?title=${encodeURIComponent(article.metadata.title)}&category=${encodeURIComponent(article.metadata.category)}&author=${encodeURIComponent(article.metadata.author)}`,
+          width: 1200,
+          height: 630,
+          alt: article.metadata.title,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: article.metadata.title,
       description: article.metadata.excerpt,
+      images: [`/api/og?title=${encodeURIComponent(article.metadata.title)}&category=${encodeURIComponent(article.metadata.category)}&author=${encodeURIComponent(article.metadata.author)}`],
     },
   };
 }
 
 export async function generateStaticParams() {
-  const articles = getAllArticles();
-  return articles.map((article) => ({
-    slug: article.metadata.slug,
-  }));
+  if (!(process.env.DATABASE_URL || process.env.SQL_HOST)) return [];
+  try {
+    const articles = await getPublishedArticles();
+    return articles.map((article) => ({
+      slug: article.metadata.slug,
+    }));
+  } catch (err) {
+    return [];
+  }
 }
 
 export default async function ArticlePage({ params }: PageProps) {
   const { slug } = await params;
+  const session = await auth();
+  const isAdmin = session?.user?.role === "ADMIN";
 
-  const articles = getAllArticles();
-  const articleIndex = articles.findIndex((a) => a.metadata.slug === slug);
-  const article = articles[articleIndex];
+  const article = await getArticleBySlug(slug);
 
-  if (!article) {
+  // Return 404 for non-existent articles, or draft articles when viewer is not admin
+  if (!article || (article.metadata.draft && !isAdmin)) {
     return notFound();
   }
 
-  const prevArticle = articleIndex < articles.length - 1 ? articles[articleIndex + 1] : null;
-  const nextArticle = articleIndex > 0 ? articles[articleIndex - 1] : null;
+  const articles = isAdmin ? await getAllArticles() : await getPublishedArticles();
+  const articleIndex = articles.findIndex((a) => a.metadata.slug === slug);
+
+  const prevArticle = articleIndex !== -1 && articleIndex < articles.length - 1 ? articles[articleIndex + 1] : null;
+  const nextArticle = articleIndex !== -1 && articleIndex > 0 ? articles[articleIndex - 1] : null;
 
   const headersList = await headers();
   const countryCode = headersList.get("x-country-code") || "US";
   const pppConfig = getPppConfig(countryCode);
 
-  const session = await auth();
   const isPremiumUser = session?.user?.isPremium === true;
   const shouldPaywall = article.metadata.isPremium && !isPremiumUser;
 
@@ -72,56 +108,96 @@ export default async function ArticlePage({ params }: PageProps) {
     : article.content;
 
   const wordCount = article.content.trim().split(/\s+/).length;
-  const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 225));
+  const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
   const cat = getCategoryBySlug(article.metadata.category);
   const isBook = cat?.slug === "books" || article.metadata.category === "books";
 
+  let likeCount = 0;
+  let initialComments: any[] = [];
+  let isInitiallyLiked = false;
+  let isInitiallySaved = false;
+
+  if ((process.env.DATABASE_URL || process.env.SQL_HOST)) {
+    try {
+      const [count, comments] = await Promise.all([
+        prisma.articleLike.count({ where: { articleId: slug } }),
+        prisma.comment.findMany({
+          where: { articleId: slug },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: { select: { name: true, image: true } }
+          }
+        })
+      ]);
+      likeCount = count;
+      initialComments = comments;
+
+      if (session?.user?.id) {
+        const [userLike, userSaved] = await Promise.all([
+          prisma.articleLike.findUnique({
+            where: { articleId_userId: { articleId: slug, userId: session.user.id } }
+          }),
+          prisma.savedArticle.findUnique({
+            where: { articleId_userId: { articleId: slug, userId: session.user.id } }
+          })
+        ]);
+        isInitiallyLiked = !!userLike;
+        isInitiallySaved = !!userSaved;
+      }
+    } catch (dbError) {
+      console.warn("Database query skipped or failed:", dbError);
+    }
+  }
+
+  // Format comments to match expected type
+  const formattedComments = initialComments.map(c => ({
+    ...c,
+    createdAt: typeof c.createdAt === 'string' ? c.createdAt : (c.createdAt?.toISOString?.() || new Date().toISOString())
+  }));
+
+  const relatedArticles = articles
+    .filter(a => a.metadata.category === article.metadata.category && a.metadata.slug !== slug)
+    .slice(0, 3);
+
   return (
-    <article id={`article-node-${slug}`} className="min-h-screen bg-[#FCFBF9] text-black pb-24 font-serif antialiased selection:bg-black selection:text-white" dir="rtl">
+    <article id={`article-node-${slug}`} className="min-h-screen bg-[#FCFBF9] text-black pb-24 font-serif antialiased selection:bg-[#C86A00] selection:text-white" dir="rtl">
+      <ReadingProgress />
+      <TextHighlighter articleUrl={`${process.env.NEXT_PUBLIC_APP_URL || 'https://me-mar.com'}/articles/${slug}`} />
+      <ArticleChat slug={slug} articleTitle={article.metadata.title} />
+      
       {/* Dossier Header */}
       <header className="border-b border-neutral-200 py-16 md:py-24 bg-white">
         <div className="max-w-3xl mx-auto px-6 text-right">
-          <div className="flex flex-wrap items-center gap-2.5 mb-6 font-sans text-xs text-neutral-500">
-            {cat && (
-              <Link
-                href={cat.isHorizontal ? "/books" : `/categories/${cat.slug}`}
-                className="bg-black text-white px-2.5 py-0.5 font-bold text-[10px] rounded-xs hover:bg-neutral-800 transition-colors"
-              >
-                {cat.title}
-              </Link>
-            )}
-            <span className="text-neutral-300">•</span>
-            <span className="flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 ml-1 text-neutral-400" />
-              {new Date(article.metadata.publishedAt).toLocaleDateString("ar-EG", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </span>
-            <span className="text-neutral-300">•</span>
-            <span className="flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 ml-1 text-neutral-400" />
-              وقت القراءة: {readingTimeMinutes} دقيقة
-            </span>
-            <span className="text-neutral-300">•</span>
-            {article.metadata.isPremium ? (
-              <span className="text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold rounded-xs">
-                تحليل حصري للمشتركين
-              </span>
-            ) : (
-              <span className="text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold rounded-xs">
-                متاح مجاناً
-              </span>
-            )}
-          </div>
-
           <h1 className="text-3xl md:text-5xl font-serif font-black text-[#111111] leading-[1.35] mb-6">
             {article.metadata.title}
           </h1>
 
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b border-neutral-100">
+            <AuthorByline
+              authorName={article.metadata.author}
+              publishDate={new Date(article.metadata.publishedAt).toLocaleDateString("ar-EG", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
+              readingTime={`${readingTimeMinutes} دقيقة قراءة`}
+              size="lg"
+              showTitle={true}
+            />
+            <div className="flex items-center gap-3">
+              <BookmarkButton articleId={slug} isInitiallySaved={isInitiallySaved} />
+              {article.metadata.isPremium && (
+                <span className="text-white bg-black px-3 py-1 text-xs font-bold font-sans uppercase tracking-wider">
+                  دراسة خاصة للمشتركين
+                </span>
+              )}
+            </div>
+          </div>
+
+          <AudioPlayer textTitle={article.metadata.title} textContent={finalContent} />
+
           {isBook && article.metadata.bookAuthor && (
-            <div className="mb-6 font-sans text-sm text-neutral-700 bg-neutral-100/80 p-4 border-r-3 border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="mt-8 mb-6 font-sans text-sm text-neutral-700 bg-neutral-100/80 p-4 border-r-3 border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 الكتاب قيد المراجعة: <strong>{article.metadata.bookOriginalTitle || article.metadata.title}</strong>
               </div>
@@ -131,89 +207,115 @@ export default async function ArticlePage({ params }: PageProps) {
             </div>
           )}
 
-          <p className="text-lg md:text-[20px] text-neutral-700 leading-[1.8] mb-8 font-serif italic max-w-3xl">
+          <p className="text-lg md:text-[20px] text-neutral-700 leading-[1.8] mt-8 mb-2 font-serif italic max-w-3xl">
             {article.metadata.excerpt}
           </p>
-
-          {/* Audio Intelligence Briefing Bar */}
-          <div className="mt-8 max-w-2xl bg-neutral-50 border border-neutral-200 p-4 rounded-sm flex items-center justify-between gap-4 font-sans text-xs">
-            <div className="flex items-center gap-3">
-              <button aria-label="تشغيل التسجيل الصوتي" className="w-9 h-9 bg-black hover:bg-neutral-800 text-white rounded-full flex items-center justify-center transition-colors">
-                <Play className="w-4 h-4 fill-current ml-0.5" />
-              </button>
-              <div>
-                <span className="font-bold text-neutral-900 block">الإيجاز الصوتي المسجل</span>
-                <span className="text-neutral-400 text-[10px]">متاح أيضاً عبر خلاصة RSS الخاصة بالمشتركين</span>
-              </div>
-            </div>
-            <span className="font-mono text-neutral-500" dir="ltr">0:00 / {readingTimeMinutes}:00</span>
-          </div>
         </div>
       </header>
 
       {/* Content Rendering */}
-      <section className="max-w-3xl mx-auto px-6 mt-14 md:mt-18 text-right">
-        <div className="space-y-6">
-          {finalContent.split(/\n\s*\n/).map((paragraph, index) => {
-            const trimmed = paragraph.trim();
-            if (!trimmed) return null;
-
-            // Detect Books "الفكرة في زمننا" section header
-            if (trimmed.includes("الفكرة في زمننا") || trimmed.startsWith("### الفكرة في زمننا")) {
-              return (
-                <div key={index} className="my-10 p-6 bg-[#FFFDF5] border-2 border-amber-800/40 rounded-sm">
-                  <div className="flex items-center gap-2 text-amber-900 font-sans font-bold text-sm mb-2">
-                    <Compass className="w-4 h-4 text-amber-800" />
-                    <span>الفكرة في زمننا (The Idea in Our Time)</span>
-                  </div>
-                  <h3 className="text-xl md:text-2xl font-serif font-bold text-neutral-900">
-                    {trimmed.replace(/^#+\s*/, "")}
-                  </h3>
-                </div>
-              );
-            }
-
-            if (trimmed.startsWith("### ")) {
-              return (
-                <h3 key={index} className="text-xl md:text-2xl font-serif font-bold text-black mt-10 mb-4 leading-snug">
-                  {trimmed.replace("### ", "")}
-                </h3>
-              );
-            }
-            if (trimmed.startsWith("## ")) {
-              return (
-                <h2 key={index} className="text-2xl md:text-3xl font-serif font-bold text-black mt-12 mb-5 border-b border-neutral-200 pb-2 leading-snug">
-                  {trimmed.replace("## ", "")}
-                </h2>
-              );
-            }
-            if (trimmed.startsWith("# ")) {
-              return (
-                <h1 key={index} className="text-3xl md:text-4xl font-serif font-black text-black mt-14 mb-6 leading-tight">
-                  {trimmed.replace("# ", "")}
-                </h1>
-              );
-            }
-            if (trimmed.startsWith("> ")) {
-              return (
-                <blockquote key={index} className="bg-[#FFFBF2] border-r-3 border-amber-800 p-6 my-8 text-neutral-800 text-base leading-relaxed text-right font-serif">
-                  {trimmed.replace("> ", "")}
-                </blockquote>
-              );
-            }
-
-            return (
-              <p key={index} className="text-base md:text-[18px] leading-[1.9] text-neutral-800 font-serif">
-                {trimmed}
-              </p>
-            );
-          })}
-        </div>
+      <section className="max-w-5xl mx-auto px-6 mt-14 md:mt-18 text-right flex flex-col lg:flex-row gap-12 relative">
+        <TableOfContents />
+        <div 
+          className="space-y-6 flex-grow max-w-3xl article-content prose prose-lg max-w-none prose-neutral font-serif text-neutral-800 leading-[1.9]"
+          dangerouslySetInnerHTML={{ __html: finalContent }}
+        />
 
         {/* Dynamic Paywall */}
         {shouldPaywall && (
           <div className="mt-16">
             <Paywall countryCode={countryCode} pppConfig={pppConfig} />
+          </div>
+        )}
+
+        {/* Zone 3: Engagement Footer */}
+        {!shouldPaywall && (
+          <div className="mt-16 pt-8 border-t border-neutral-200">
+            <div className="flex items-center gap-3 mb-12">
+              <LikeButton articleId={slug} initialLikes={likeCount} isInitiallyLiked={isInitiallyLiked} />
+              <BookmarkButton articleId={slug} isInitiallySaved={isInitiallySaved} />
+            </div>
+
+            <CommentsSection articleId={slug} initialComments={formattedComments} />
+
+            {relatedArticles.length > 0 && (
+              <div className="mt-16 pt-12 border-t border-neutral-200">
+                <h3 className="text-2xl font-serif font-bold text-neutral-900 mb-8">أطروحات ذات صلة</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {relatedArticles.map((rel) => (
+                    <Link key={rel.metadata.slug} href={`/articles/${rel.metadata.slug}`} className="block group">
+                      <div className="border border-neutral-200 rounded-lg p-5 hover:border-amber-800 transition-colors h-full flex flex-col bg-white">
+                        <span className="text-amber-800 text-xs font-sans font-bold mb-3 block">
+                          {getCategoryBySlug(rel.metadata.category)?.title || rel.metadata.category}
+                        </span>
+                        <h4 className="text-lg font-serif font-bold text-neutral-900 mb-3 group-hover:text-amber-800 transition-colors leading-snug">
+                          {rel.metadata.title}
+                        </h4>
+                        <p className="text-neutral-600 text-sm font-serif line-clamp-2 mt-auto">
+                          {rel.metadata.excerpt}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Author Dossier Box */}
+            {(() => {
+              const authorData = getAuthorByName(article.metadata.author);
+              const avatarImg = authorData.avatarUrl || authorData.avatar;
+              const initials = getAuthorInitials(authorData.name);
+              return (
+                <div className="border border-neutral-200 bg-white p-6 sm:p-8 rounded-xs relative shadow-2xs">
+                  <div className="absolute top-0 right-0 left-0 h-1 bg-[#C86A00]" />
+                  <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 text-center sm:text-right">
+                    <div className="relative w-20 h-20 rounded-full overflow-hidden border-2 border-[#C86A00] flex-shrink-0 shadow-sm bg-[#FAF7F0] flex items-center justify-center">
+                      {avatarImg ? (
+                        <Image
+                          src={avatarImg}
+                          alt={authorData.name}
+                          fill
+                          sizes="80px"
+                          className="object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="text-xl font-serif font-bold text-[#8C4B00] select-none">
+                          {initials}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-2 flex-grow min-w-0">
+                      {authorData.title && (
+                        <div className="text-[11px] font-mono text-[#C86A00] font-bold">
+                          {authorData.title}
+                        </div>
+                      )}
+                      <h4 className="text-xl font-bold font-serif text-black">
+                        {authorData.name}
+                      </h4>
+                      {authorData.bio && (
+                        <p className="text-xs sm:text-sm text-neutral-600 font-serif leading-relaxed">
+                          {authorData.bio}
+                        </p>
+                      )}
+                      <div className="pt-2">
+                        <Link
+                          href={`/authors/${authorData.slug}`}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-black hover:text-[#C86A00] transition-colors"
+                        >
+                          <span>عرض كافة دراسات الكاتب في مِعمار</span>
+                          <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <NewsletterForm />
           </div>
         )}
       </section>

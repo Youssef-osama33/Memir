@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { Mail, ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 function VerifyContent() {
   const searchParams = useSearchParams();
   const email = searchParams?.get("email") || "بريدك الإلكتروني";

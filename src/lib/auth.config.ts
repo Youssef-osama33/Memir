@@ -1,7 +1,39 @@
 import type { NextAuthConfig } from "next-auth";
+import { skipCSRFCheck } from "@auth/core";
 import { Role } from "@prisma/client";
 
 export const authConfig = {
+  trustHost: true,
+  skipCSRFCheck: skipCSRFCheck,
+  cookies: {
+    sessionToken: {
+      name: "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    callbackUrl: {
+      name: "authjs.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+    csrfToken: {
+      name: "authjs.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "none",
+        path: "/",
+        secure: true,
+      },
+    },
+  },
   providers: [], // Providers are populated in auth.ts
   session: {
     strategy: "jwt",

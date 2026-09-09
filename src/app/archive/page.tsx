@@ -1,19 +1,37 @@
 import React from "react";
-import { getAllArticles } from "../../lib/mdx";
-import { CATEGORIES, getCategoryBySlug } from "../../lib/categories";
+import { getPublishedArticles } from "../../lib/articles";
+import { CATEGORIES } from "../../lib/categories";
 import Navigation from "../../components/navigation";
 import Footer from "../../components/footer";
 import Link from "next/link";
 import { Calendar, Lock, ArrowLeft, BookOpen, Layers } from "lucide-react";
+import { AuthorByline } from "../../components/AuthorByline";
+import BookmarkButton from "../../components/article/BookmarkButton";
+import CategoryBadge from "../../components/article/CategoryBadge";
 
 export const dynamic = "force-dynamic";
 
-export default async function ArchivePage() {
-  const articles = getAllArticles();
+export default async function ArchivePage(props: { searchParams?: Promise<{ q?: string }> }) {
+  const searchParams = await props.searchParams;
+  const allArticles = await getPublishedArticles();
+  
+  // Search filtering
+  const searchQuery = searchParams?.q?.toLowerCase() || "";
+  let articles = allArticles;
+  
+  if (searchQuery) {
+    articles = allArticles.filter((article) => {
+      const matchTitle = article.metadata.title.toLowerCase().includes(searchQuery);
+      const matchExcerpt = article.metadata.excerpt.toLowerCase().includes(searchQuery);
+      const matchContent = article.content.toLowerCase().includes(searchQuery);
+      return matchTitle || matchExcerpt || matchContent;
+    });
+  }
 
   return (
     <div id="me-mar-archive-context" className="min-h-screen bg-[#FCFBF9] text-[#111111] font-serif selection:bg-black selection:text-white flex flex-col justify-between" dir="rtl">
       <Navigation />
+
       <div className="max-w-4xl mx-auto px-6 text-right py-16 flex-grow w-full">
         {/* Archive Title */}
         <div className="border-b border-neutral-300 pb-8 mb-12">
@@ -26,62 +44,118 @@ export default async function ArchivePage() {
           <p className="text-sm md:text-base text-neutral-600 font-serif leading-relaxed mt-4 max-w-2xl">
             سجل توثيقي مصنف لكافة أوراق التقدير والمراجعات الاستراتيجية الصادرة عن مِعمار، موزعة عبر الأقسام الثمانية ومسار الكتب المستقل.
           </p>
+          
+          {searchQuery && (
+            <div className="mt-6 bg-neutral-100 p-4 rounded-sm border border-neutral-200">
+              <p className="text-sm font-sans font-medium text-neutral-700">
+                نتائج البحث عن: <strong className="text-black">"{searchQuery}"</strong> ({articles.length} نتيجة)
+              </p>
+              <Link href="/archive" className="text-xs text-amber-600 hover:text-amber-800 underline mt-2 inline-block">
+                إلغاء البحث وإظهار كل الأرشيف
+              </Link>
+            </div>
+          )}
         </div>
 
         {/* Categories Quick Jump */}
-        <div className="mb-14 bg-white border border-neutral-200 p-6 rounded-sm">
-          <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-neutral-500 mb-4 flex items-center gap-1.5">
-            <Layers className="w-4 h-4" />
-            <span>الانتقال السريع للأقسام:</span>
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-sans text-xs">
-            <Link
-              href="/books"
-              className="p-2.5 bg-amber-50 border border-amber-200 hover:bg-amber-100/70 font-bold text-amber-900 rounded-sm text-center flex items-center justify-center gap-1"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>الكتب المستقلة</span>
-            </Link>
-            {CATEGORIES.filter((c) => !c.isHorizontal).map((c) => (
-              <a
-                key={c.slug}
-                href={`#section-${c.slug}`}
-                className="p-2.5 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 text-neutral-800 rounded-sm text-center font-medium"
+        {!searchQuery && (
+          <div className="mb-14 bg-white border border-neutral-200 p-6 rounded-sm">
+            <h3 className="text-xs font-bold font-sans uppercase tracking-wider text-neutral-500 mb-4 flex items-center gap-1.5">
+              <Layers className="w-4 h-4" />
+              <span>الانتقال السريع للأقسام:</span>
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-sans text-xs">
+              <Link
+                href="/books"
+                className="p-2.5 bg-amber-50 border border-amber-200 hover:bg-amber-100/70 font-bold text-amber-900 rounded-sm text-center flex items-center justify-center gap-1"
               >
-                {c.title}
-              </a>
-            ))}
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>الكتب المستقلة</span>
+              </Link>
+              {CATEGORIES.filter((c) => !c.isHorizontal).map((c) => (
+                <a
+                  key={c.slug}
+                  href={`#section-${c.slug}`}
+                  className="p-2.5 bg-neutral-50 border border-neutral-200 hover:bg-neutral-100 text-neutral-800 rounded-sm text-center font-medium"
+                >
+                  {c.title}
+                </a>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Grouped by All 8 Categories */}
+        {/* Search Results / Full Archive */}
         <div className="space-y-16">
-          {CATEGORIES.map((category) => {
-            const catArticles = articles.filter((a) => a.metadata.category === category.slug);
-            return (
-              <section key={category.slug} id={`section-${category.slug}`} className="scroll-mt-24">
-                <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-6">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl md:text-2xl font-sans font-bold text-black">
-                      {category.title}
-                    </h2>
-                    <span className="text-xs bg-black text-[#FCFBF9] font-sans px-2.5 py-0.5 font-bold mr-2">
-                      {catArticles.length}
-                    </span>
-                  </div>
-                  <Link
-                    href={category.isHorizontal ? "/books" : `/categories/${category.slug}`}
-                    className="text-xs font-sans font-bold text-neutral-500 hover:text-black transition-colors"
+          {searchQuery ? (
+            <div className="space-y-6">
+              {articles.length === 0 ? (
+                <p className="text-sm text-neutral-500 font-sans italic py-4">
+                  لا توجد نتائج مطابقة لبحثك.
+                </p>
+              ) : (
+                articles.map((article) => (
+                  <div
+                    key={article.metadata.slug}
+                    className="group relative pb-6 border-b border-neutral-200 last:border-b-0"
                   >
-                    صفحة القسم المستقلة ←
-                  </Link>
-                </div>
-
-                {catArticles.length === 0 ? (
-                  <p className="text-xs text-neutral-400 font-sans italic py-4">
-                    [لا توجد تحليلات منشورة في هذا القسم حالياً]
-                  </p>
-                ) : (
+                    <div className="flex items-center gap-3 text-[10px] font-sans text-neutral-400 uppercase mb-1.5">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 ml-1" />
+                        {new Date(article.metadata.publishedAt).toLocaleDateString("ar-EG")}
+                      </span>
+                      <span>•</span>
+                      <CategoryBadge categorySlug={article.metadata.category} />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-bold text-black mb-2 group-hover:text-[#C86A00] transition-colors">
+                      <Link href={`/articles/${article.metadata.slug}`}>
+                        {article.metadata.title}
+                      </Link>
+                    </h3>
+                    <p className="text-xs md:text-sm text-neutral-600 leading-[1.8] max-w-3xl mb-4 font-serif">
+                      {article.metadata.excerpt}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                      <AuthorByline
+                        authorName={article.metadata.author}
+                        size="sm"
+                      />
+                      <Link
+                        href={`/articles/${article.metadata.slug}`}
+                        className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-black hover:text-[#C86A00] transition-colors"
+                      >
+                        <span>قراءة الدراسة كاملة</span>
+                        <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            CATEGORIES.map((category) => {
+              const catArticles = articles.filter((a) => a.metadata.category === category.slug);
+              if (catArticles.length === 0) return null;
+              
+              return (
+                <section key={category.slug} id={`section-${category.slug}`} className="scroll-mt-24">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-3 mb-6">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl md:text-2xl font-sans font-bold text-black">
+                        {category.title}
+                      </h2>
+                      <span className="text-xs bg-black text-[#FCFBF9] font-sans px-2.5 py-0.5 font-bold mr-2">
+                        {catArticles.length}
+                      </span>
+                    </div>
+                    <Link
+                      href={category.isHorizontal ? "/books" : `/categories/${category.slug}`}
+                      className="text-xs font-sans font-bold text-neutral-500 hover:text-black transition-colors"
+                    >
+                      صفحة القسم المستقلة ←
+                    </Link>
+                  </div>
+                  
                   <div className="space-y-6">
                     {catArticles.map((article) => (
                       <div
@@ -95,7 +169,7 @@ export default async function ArchivePage() {
                           </span>
                           <span>•</span>
                           {article.metadata.isPremium ? (
-                            <span className="flex items-center gap-1 text-amber-700 bg-amber-50 px-1 py-0.2 border border-amber-200">
+                            <span className="flex items-center gap-1 text-[#C86A00] bg-amber-50 px-1 py-0.2 border border-amber-200">
                               <Lock className="w-3 h-3 ml-0.5" />
                               للمشتركين
                             </span>
@@ -105,37 +179,42 @@ export default async function ArchivePage() {
                             </span>
                           )}
                         </div>
-
-                        <h3 className="text-lg md:text-xl font-bold text-black mb-2 group-hover:text-amber-800">
+                        <h3 className="text-lg md:text-xl font-bold text-black mb-2 group-hover:text-[#C86A00] transition-colors">
                           <Link href={`/articles/${article.metadata.slug}`}>
                             {article.metadata.title}
                           </Link>
                         </h3>
-
                         {article.metadata.category === "books" && article.metadata.bookAuthor && (
                           <div className="text-xs text-neutral-500 font-sans mb-2">
-                            المؤلف: <strong>{article.metadata.bookAuthor}</strong>
+                            المؤلف الأصلي للكتاب: <strong className="text-black">{article.metadata.bookAuthor}</strong>
                           </div>
                         )}
-
-                        <p className="text-xs md:text-sm text-neutral-600 leading-[1.8] max-w-3xl mb-3 font-serif">
+                        <p className="text-xs md:text-sm text-neutral-600 leading-[1.8] max-w-3xl mb-4 font-serif">
                           {article.metadata.excerpt}
                         </p>
-
-                        <Link
-                          href={`/articles/${article.metadata.slug}`}
-                          className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-black hover:text-amber-800"
-                        >
-                          <span>قراءة المقال</span>
-                          <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-                        </Link>
+                        <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+                          <AuthorByline
+                            authorName={article.metadata.author}
+                            size="sm"
+                          />
+                          <div className="flex items-center gap-3">
+                            <BookmarkButton articleId={article.metadata.slug} showLabel={false} />
+                            <Link
+                              href={`/articles/${article.metadata.slug}`}
+                              className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-black hover:text-[#C86A00] transition-colors"
+                            >
+                              <span>قراءة الدراسة كاملة</span>
+                              <ArrowLeft className="w-3.5 h-3.5 mr-1" />
+                            </Link>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
-              </section>
-            );
-          })}
+                </section>
+              );
+            })
+          )}
         </div>
       </div>
       <Footer />

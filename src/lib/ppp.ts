@@ -106,6 +106,89 @@ export function formatPrice(cents: number, currency = "USD", symbol = "$"): stri
   return `${symbol}${formatted}`;
 }
 
+export type PlanTierType = "FREE" | "STANDARD" | "PLUS";
+export type BillingIntervalType = "MONTHLY" | "YEARLY";
+
+export interface TierPricingResult {
+  tier: PlanTierType;
+  interval: BillingIntervalType;
+  amountCents: number;
+  formattedPrice: string;
+  monthlyEquivalentFormatted: string;
+  rawMonthlyCents: number;
+  discountPercentage: number;
+  stripeCouponId: string | null;
+  currency: string;
+  currencySymbol: string;
+  savingsLabel?: string;
+  annualDiscountDescription?: string;
+}
+
+// Base USD prices (cents)
+const BASE_PRICES: Record<PlanTierType, { monthly: number; yearly: number }> = {
+  FREE: {
+    monthly: 0,
+    yearly: 0,
+  },
+  STANDARD: {
+    monthly: 1500,  // $15.00
+    yearly: 15000,  // $150.00 (2 months free = monthly x 10)
+  },
+  PLUS: {
+    monthly: 2500,  // $25.00
+    yearly: 25000,  // $250.00 (2 months free = monthly x 10)
+  },
+};
+
+/**
+ * Calculates adjusted price for any tier and billing interval under invisible PPP
+ */
+export function getTierPricing(
+  tier: PlanTierType,
+  interval: BillingIntervalType,
+  countryCode?: string | null
+): TierPricingResult {
+  if (tier === "FREE") {
+    return {
+      tier: "FREE",
+      interval,
+      amountCents: 0,
+      formattedPrice: "مجاناً",
+      monthlyEquivalentFormatted: "$0",
+      rawMonthlyCents: 0,
+      discountPercentage: 0,
+      stripeCouponId: null,
+      currency: "USD",
+      currencySymbol: "$",
+    };
+  }
+
+  const ppp = getPppConfig(countryCode);
+  const base = BASE_PRICES[tier][interval === "MONTHLY" ? "monthly" : "yearly"];
+  
+  // Calculate PPP-adjusted amount
+  const multiplier = (100 - ppp.discountPercentage) / 100;
+  const amountCents = Math.round(base * multiplier);
+
+  // Compute equivalent monthly cost if billed annually
+  const monthlyCents = interval === "MONTHLY" ? amountCents : Math.round(amountCents / 12);
+
+  return {
+    tier,
+    interval,
+    amountCents,
+    formattedPrice: formatPrice(amountCents, ppp.currency, ppp.currencySymbol),
+    monthlyEquivalentFormatted: formatPrice(monthlyCents, ppp.currency, ppp.currencySymbol),
+    rawMonthlyCents: monthlyCents,
+    discountPercentage: ppp.discountPercentage,
+    stripeCouponId: ppp.stripeCouponId,
+    currency: ppp.currency,
+    currencySymbol: ppp.currencySymbol,
+    savingsLabel: interval === "YEARLY" ? "شهران مجاناً (وفر ~17%)" : undefined,
+    annualDiscountDescription: interval === "YEARLY" ? "يُدفع سنوياً مع توفير شهرين كاملين" : undefined,
+  };
+}
+
 // Popular Arab and international countries for PPP selector and simulation
 export const POPULAR_COUNTRIES = [
   { code: "EG", name: "مصر (Egypt)", tier: "Tier 3 - خصم 66%" },

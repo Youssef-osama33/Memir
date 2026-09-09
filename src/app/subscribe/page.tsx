@@ -1,101 +1,117 @@
 import { headers } from "next/headers";
 import Navigation from "../../components/navigation";
 import Footer from "../../components/footer";
-import Link from "next/link";
-import { Lock, Check, ArrowLeft, ShieldCheck } from "lucide-react";
-import { getPppConfig, formatPrice } from "../../lib/ppp";
+import { Sparkles, HelpCircle, CheckCircle2, Award } from "lucide-react";
+import { getTierPricing, PlanTierType } from "../../lib/ppp";
+import SubscriptionPricingTable from "../../components/SubscriptionPricingTable";
 
 export const dynamic = "force-dynamic";
 
 export default async function SubscribePage() {
   const headersList = await headers();
   const countryCode = headersList.get("x-country-code") || "DZ";
-  const pppConfig = getPppConfig(countryCode);
-  const localizedPrice = formatPrice(
-    pppConfig.suggestedPriceCents,
-    pppConfig.currency,
-    pppConfig.currencySymbol
-  );
+
+  const tiers: PlanTierType[] = ["FREE", "STANDARD", "PLUS"];
+
+  const monthlyPrices: any = {};
+  const yearlyPrices: any = {};
+
+  for (const t of tiers) {
+    monthlyPrices[t] = getTierPricing(t, "MONTHLY", countryCode);
+    yearlyPrices[t] = getTierPricing(t, "YEARLY", countryCode);
+  }
 
   return (
     <div className="min-h-screen bg-[#FCFBF9] text-neutral-900 font-serif flex flex-col justify-between" dir="rtl">
       <Navigation />
 
-      <main className="max-w-3xl mx-auto px-6 py-16 text-right flex-grow">
-        <div className="text-center max-w-2xl mx-auto mb-12">
-          <div className="inline-flex items-center gap-1.5 bg-neutral-900 text-white px-3 py-1 text-xs font-sans font-bold uppercase mb-4 rounded-xs">
-            <Lock className="w-3.5 h-3.5 text-amber-400" />
-            <span>عضوية مِعمار بلس</span>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-12 md:py-16 text-right flex-grow w-full">
+        {/* Header Section */}
+        <div className="text-center max-w-3xl mx-auto mb-12">
+          <div className="inline-flex items-center gap-2 bg-[#FAF7F0] border border-[#C86A00]/30 text-[#8C4B00] px-3.5 py-1 text-xs font-sans font-bold uppercase tracking-wider mb-4 rounded-full">
+            <Sparkles className="w-3.5 h-3.5 text-[#C86A00]" />
+            <span>باقات الاشتراك والبحث الاستراتيجي</span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-serif font-bold tracking-tight text-black leading-tight">
-            اشتراك مِعمار بلس
+
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold tracking-tight text-black leading-tight mb-4">
+            انضم إلى شبكة مِعمار التحليلية
           </h1>
-          <p className="text-neutral-600 font-serif text-sm mt-4 leading-relaxed max-w-lg mx-auto">
-            وصول غير مقيد للتحليلات الاستراتيجية، تفكيك أمهات الكتب الفكرية مع قسم 'الفكرة في زمننا'، وبث البودكاست المشفر عبر خلاصة شخصية.
+          <p className="text-neutral-600 font-serif text-sm sm:text-base leading-relaxed max-w-2xl mx-auto">
+            منصة مستقلة متخصصة في تفكيك التحولات الجيوسياسية، هندسة الذكاء الاصطناعي، الأمن السيبراني، ومراجعة أمهات الكتب الفكرية بعيون استراتيجية رصينة.
           </p>
         </div>
 
-        {/* Subscription Plan Card */}
-        <div className="bg-[#FAF9F6] border border-neutral-300 p-8 md:p-10 relative shadow-xs">
-          <div className="border-b border-neutral-200 pb-6 mb-8">
-            <div className="flex items-center justify-between">
+        {/* 3-Tier Pricing Table with Monthly/Yearly Toggle */}
+        <SubscriptionPricingTable
+          prices={{
+            monthly: monthlyPrices,
+            yearly: yearlyPrices,
+          }}
+        />
+
+        {/* Institutional & Research Note */}
+        <div className="mt-16 bg-[#F8F6F0] border border-neutral-300/80 p-6 md:p-8 rounded-xs">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 bg-black text-white flex items-center justify-center shrink-0 rounded-xs mt-1">
+                <Award className="w-5 h-5 text-[#C86A00]" />
+              </div>
               <div>
-                <h2 className="text-xl md:text-2xl font-serif font-bold text-black">
-                  الاشتراك الشهري
-                </h2>
-                <p className="text-xs text-neutral-400 font-mono mt-0.5" dir="ltr">
-                  MONTHLY RESEARCH PASS
+                <h4 className="text-base font-serif font-bold text-black mb-1">
+                  هل تبحث عن اشتراك مؤسسي للمراكز البحثية والجامعات؟
+                </h4>
+                <p className="text-xs text-neutral-600 font-serif leading-relaxed max-w-2xl">
+                  توفر مِعمار تراخيص متعددة المقاعد (Multi-Seat Access) لغرف الأخبار، مراكز السياسات، والمؤسسات الأكاديمية الراغبة في توفير صلاحيات كاملة لفريق العمل مع فواتير ضريبية معتمدة.
                 </p>
               </div>
-              <div className="text-left font-sans">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl md:text-4xl font-serif font-black text-black">
-                    {localizedPrice}
-                  </span>
-                  <span className="text-xs text-neutral-500 font-sans">/ شهرياً</span>
-                </div>
-                <span className="text-[11px] text-neutral-500 block mt-0.5">
-                  تجديد شهري، إلغاء في أي وقت
-                </span>
-              </div>
             </div>
-          </div>
 
-          <div className="space-y-4 mb-8 font-sans">
-            <h3 className="font-bold text-xs text-neutral-900 uppercase tracking-wide">
-              ما يتضمنه اشتراكك في مِعمار:
-            </h3>
-            <ul className="space-y-3.5 text-xs text-neutral-700 font-serif">
-              <li className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
-                <span>وصول كامل لكافة التحليلات في الأقسام التحليلية السبعة دون قيود.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
-                <span>الوصول الكامل لمراجعات مسار الكتب وقسم 'الفكرة في زمننا' لتفكيك الواقع التكنولوجي.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
-                <span>خلاصة بودكاست صوتية مشفرة برابط شخصي دائم عبر بروتوكول RSS.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-amber-800 shrink-0 mt-0.5" />
-                <span>متابعة مستمرة للتطورات الجيوبوليتيكية والذكاء الاصطناعي وأمن البنية التحتية.</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="border-t border-neutral-200 pt-6">
-            <Link
-              href="/auth/signin"
-              className="w-full h-12 bg-neutral-900 hover:bg-black text-white font-sans font-bold text-xs tracking-wider transition-colors flex items-center justify-center gap-2 rounded-xs shadow-2xs"
+            <a
+              href="mailto:subscriptions@me-mar.com?subject=طلب اشتراك مؤسسي"
+              className="inline-flex items-center justify-center px-5 py-2.5 bg-white border border-neutral-400 hover:border-black text-black text-xs font-sans font-bold tracking-wide transition-colors shrink-0 rounded-xs shadow-2xs"
             >
-              <span>متابعة الاشتراك عبر Stripe</span>
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div className="flex items-center justify-center gap-2 mt-4 text-[11px] text-neutral-500 font-sans">
-              <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
-              <span>دفع آمن ومشفر بالكامل، إمكانية الإلغاء في أي وقت من لوحة المشترك بنقرة واحدة.</span>
+              تواصل مع قسم الاشتراكات المؤسسية
+            </a>
+          </div>
+        </div>
+
+        {/* Frequently Asked Questions */}
+        <div className="mt-16 max-w-3xl mx-auto">
+          <div className="text-center mb-8">
+            <h3 className="text-xl md:text-2xl font-serif font-bold text-black">
+              الأسئلة الشائعة حول الاشتراكات
+            </h3>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-white border border-neutral-200 p-5 rounded-xs">
+              <h5 className="text-sm font-sans font-bold text-black mb-2 flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-[#C86A00]" />
+                <span>ما الفرق بين الباقة الشهرية (Standard) وباقة بلس (Plus)؟</span>
+              </h5>
+              <p className="text-xs text-neutral-600 font-serif leading-relaxed">
+                تمنحك الباقة الشهرية وصولاً كاملاً وغير مقيد لكافة المقالات والدراسات المنشورة عبر الأقسام الثمانية. بينما تنفرد <strong>باقة بلس</strong> بميزات حصرية للمطالعة المتعمقة تشمل الاستماع للتسجيل الصوتي الاستراتيجي للأوراق، وتحميل ملفات PDF عالية الجودة مهيأة للأرشفة والطباعة، وشارة مميزة في نقاشات الموقع.
+              </p>
+            </div>
+
+            <div className="bg-white border border-neutral-200 p-5 rounded-xs">
+              <h5 className="text-sm font-sans font-bold text-black mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#C86A00]" />
+                <span>كيف يعمل خيار الدفع السنوي؟</span>
+              </h5>
+              <p className="text-xs text-neutral-600 font-serif leading-relaxed">
+                عند اختيار الدفع السنوي، تحصل على خصم يوازي شهرين مجاناً (حيث تحسب تكلفة 10 أشهر فقط وتستمتع بعام كامل من الوصول). يتم الخصم دفعة واحدة كل 12 شهراً.
+              </p>
+            </div>
+
+            <div className="bg-white border border-neutral-200 p-5 rounded-xs">
+              <h5 className="text-sm font-sans font-bold text-black mb-2 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#C86A00]" />
+                <span>هل يمكنني إلغاء اشتراكي في أي وقت؟</span>
+              </h5>
+              <p className="text-xs text-neutral-600 font-serif leading-relaxed">
+                نعم، لا توجد أي التزامات طويلة الأمد. يمكنك إلغاء التجديد التلقائي بنقرة واحدة من لوحة التحكم الخاصة بك في أي لحظة، وستظل محتفظاً بالوصول حتى نهاية الفترة المدفوعة.
+              </p>
             </div>
           </div>
         </div>

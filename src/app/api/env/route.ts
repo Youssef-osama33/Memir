@@ -1,0 +1,4 @@
+import { NextResponse } from "next/server";
+export async function GET() {
+  return NextResponse.json({ url: (process.env.DATABASE_URL || process.env.SQL_HOST) });
+}

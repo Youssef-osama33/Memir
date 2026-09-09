@@ -4,12 +4,26 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 enum Role {
   USER
+  WRITER
+  EDITOR
   ADMIN
+}
+
+enum PlanTier {
+  FREE
+  STANDARD
+  PLUS
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
 }
 
 enum SubscriptionStatus {
@@ -23,31 +37,39 @@ enum SubscriptionStatus {
 }
 
 enum Category {
-  AI_GEOPOLITICS              // الذكاء الاصطناعي والجيوبوليتكس
-  CYBERSECURITY               // الأمن السيبراني
-  QUANTUM_COMPUTING           // الحوسبة الكمية
-  ENERGY                      // الطاقة
-  DIGITAL_INFRASTRUCTURE      // الهندسة والبنية التحتية الرقمية
-  APPLIED_MODELING            // رياضيات ونمذجة تطبيقية
-  FIQH_AL_WAQI                // فقه الواقع
-  BOOKS                       // الكتب
+  AI_GEOPOLITICS // الذكاء الاصطناعي والجيوبوليتكس
+  CYBERSECURITY // الأمن السيبراني
+  QUANTUM_COMPUTING // الحوسبة الكمية
+  ENERGY // الطاقة
+  DIGITAL_INFRASTRUCTURE // الهندسة والبنية التحتية الرقمية
+  APPLIED_MODELING // رياضيات ونمذجة تطبيقية
+  FIQH_AL_WAQI // فقه الواقع
+  BOOKS // الكتب
 }
 
 model User {
-  id              String         @id @default(uuid())
-  name            String?
-  email           String         @unique
-  emailVerified   DateTime?
-  image           String?
-  role            Role           @default(USER)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id            String    @id @default(uuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  phoneNumber   String? // رقم هاتف واتساب لإشعارات النشر والتحليلات الاستراتيجية
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  subscriptions   Subscription[]
-  podcastTokens   PodcastToken[]
-  webhookLogs     WebhookLog[]
+  accounts      Account[]
+  sessions      Session[]
+  subscriptions Subscription[]
+  podcastTokens PodcastToken[]
+  webhookLogs   WebhookLog[]
+  articleLikes  ArticleLike[]
+  comments      Comment[]
+  savedArticles SavedArticle[]
+  writerProfile WriterProfile?
+  articles      Article[]
+  communityPosts CommunityPost[]
+  communityReplies CommunityReply[]
 }
 
 model Account {
@@ -92,7 +114,9 @@ model Subscription {
   stripeCustomerId     String
   stripePriceId        String
   status               SubscriptionStatus
-  pppCountryCode       String?            // PPP Country Code used for billing
+  tier                 PlanTier           @default(STANDARD)
+  interval             BillingInterval    @default(MONTHLY)
+  pppCountryCode       String? // PPP Country Code used for billing
   pppDiscountApplied   Boolean            @default(false)
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
@@ -108,7 +132,7 @@ model Invoice {
   id              String   @id @default(uuid())
   subscriptionId  String
   stripeInvoiceId String   @unique
-  amountPaid      Int      // represented in cents
+  amountPaid      Int // represented in cents
   currency        String
   invoiceUrl      String?  @db.Text
   status          String
@@ -117,41 +141,144 @@ model Invoice {
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 }
 
+model Author {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  bio       String?  @db.Text
+  avatarUrl String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  articles Article[]
+}
+
 model Article {
-  id          String   @id @default(uuid())
-  slug        String   @unique
-  title       String
-  excerpt     String   @db.Text
-  content     String   @db.Text
-  author      String
-  category    Category @default(AI_GEOPOLITICS)
-  isPremium   Boolean  @default(true)
-  publishedAt DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  slug               String    @unique
+  title              String
+  excerpt            String    @db.Text
+  content            String    @db.Text
+  author             String
+  authorSlug         String?
+  authorId           String?
+  authorRel          Author?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  userId             String?
+  user               User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category           Category  @default(AI_GEOPOLITICS)
+  isPremium          Boolean   @default(true)
+  draft              Boolean   @default(true)
+  pendingReview      Boolean   @default(false)
+  bookAuthor         String?
+  ideaInOurTimeTitle String?
+  publishedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }
 
 model PodcastToken {
-  id          String   @id @default(uuid())
-  userId      String
-  token       String   @unique // obfuscated token for secure RSS authorization
-  feedUrl     String   @db.Text
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime?
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique // obfuscated token for secure RSS authorization
+  feedUrl   String    @db.Text
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WebhookLog {
-  id             String   @id @default(uuid())
-  stripeEventId  String   @unique
-  eventType      String
-  payload        Json
-  processed      Boolean  @default(false)
-  userId         String?
-  errorMessage   String?  @db.Text
-  createdAt      DateTime @default(now())
+  id            String   @id @default(uuid())
+  stripeEventId String   @unique
+  eventType     String
+  payload       Json
+  processed     Boolean  @default(false)
+  userId        String?
+  errorMessage  String?  @db.Text
+  createdAt     DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model ArticleLike {
+  id        String   @id @default(uuid())
+  articleId String // Will store the article slug
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId]) // Enforces one like per user per article
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  articleId String // Will store the article slug
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NewsletterSubscriber {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  subscribedAt DateTime @default(now())
+}
+
+model SavedArticle {
+  id        String   @id @default(uuid())
+  articleId String // Stores article slug
+  userId    String
+  savedAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([articleId, userId])
+}
+
+model ContactSubmission {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  subject   String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model WriterProfile {
+  id                 String     @id @default(uuid())
+  userId             String     @unique
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String?
+  assignedCategories Category[]
+  bio                String?    @db.Text
+  authorSlug         String?
+  joinedAt           DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model CommunityPost {
+  id        String   @id @default(uuid())
+  title     String
+  content   String   @db.Text
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replies   CommunityReply[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CommunityReply {
+  id        String   @id @default(uuid())
+  content   String   @db.Text
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
